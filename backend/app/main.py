@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import math
 import os
 import random
@@ -350,6 +351,22 @@ async def health() -> dict[str, str]:
     return {"status": "ok", "quoteSource": choose_stream()}
 
 
+@app.get("/api/debug/env")
+async def debug_env() -> dict:
+    """Show which env vars are set (not their values) for debugging."""
+    keys = ["QUOTE_SOURCE", "TIGER_ID", "tiger_id", "TIGER_ACCOUNT", "tiger_account",
+            "TIGER_PRIVATE_KEY_PK1", "tiger_private_key_pk1", "TIGER_LICENSE", "tiger_license"]
+    found = {k: bool(os.getenv(k, "").strip()) for k in keys}
+    found["source"] = choose_stream()
+    # Quick Tiger API test
+    try:
+        client = get_tiger_quote_client()
+        found["tiger_client"] = "OK"
+    except Exception as e:
+        found["tiger_client"] = str(e)
+    return found
+
+
 @app.get("/api/kline/{symbol}")
 async def get_kline(symbol: str) -> dict:
     source = choose_stream()
@@ -407,8 +424,12 @@ async def ws_quotes(websocket: WebSocket, symbol: str = Query("CL", min_length=1
     try:
         async for event in streamer(symbol):
             await websocket.send_json(event.as_dict())
-    except Exception:
-        pass  # Client disconnected or stream error
+    except Exception as exc:
+        logging.exception("WebSocket stream error: %s", exc)
+        try:
+            await websocket.send_json({"type": "error", "message": str(exc)})
+        except Exception:
+            pass
     finally:
         try:
             await websocket.close()
