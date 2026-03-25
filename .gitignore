@@ -1,0 +1,22 @@
+# Node
+node_modules/
+frontend/node_modules/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+backend/.venv/
+
+# Env and secrets
+.env
+.env.*
+*.env
+*.env.*
+*.pem
+*.key
+*openapi_config*.properties
+*openapi_token*.properties
+
+# Build
+frontend/dist/
