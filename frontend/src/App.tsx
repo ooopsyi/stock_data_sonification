@@ -280,7 +280,8 @@ function getVisualTheme(latest: QuoteEvent | null, mood: Mood, genreId: string):
   }
 }
 
-const API_HOST = import.meta.env.VITE_API_HOST || 'localhost:8000'
+// In production (same-origin deploy), use window.location.host; in dev, use localhost:8000
+const API_HOST = import.meta.env.VITE_API_HOST || (import.meta.env.DEV ? 'localhost:8000' : window.location.host)
 
 function App() {
   const [symbol, setSymbol] = useState('CL')
@@ -568,7 +569,6 @@ function App() {
     if (currentCandles.length > 0) {
       const canvas = chartRef.current
       const cWidth = canvas?.clientWidth ?? 300
-      const cHeight = canvas?.clientHeight ?? 200
       const candleBody = 7
       const gap = 2
       const step = candleBody + gap
@@ -1073,26 +1073,6 @@ function App() {
     setMood('Calm')
     setRipples([])
     setStatus(`Fresh start: ${ticker}`)
-  }
-
-  async function fetchInitialKline(ticker: string) {
-    try {
-      const httpProto = window.location.protocol === 'https:' ? 'https' : 'http'
-      const res = await fetch(`${httpProto}://${API_HOST}/api/kline/${encodeURIComponent(ticker)}`)
-      const data = await res.json()
-      if (data.bars?.length > 0) {
-        const initial: Candle[] = data.bars.map((b: { time: number; open: number; high: number; low: number; close: number }) => ({
-          start: b.time,
-          open: b.open,
-          high: b.high,
-          low: b.low,
-          close: b.close,
-        }))
-        setCandles(initial)
-      }
-    } catch {
-      // Pre-load failed, will start with empty chart
-    }
   }
 
   function connectLive() {

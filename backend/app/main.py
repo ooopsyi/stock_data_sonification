@@ -13,6 +13,8 @@ from typing import AsyncGenerator
 from dotenv import load_dotenv
 from fastapi import FastAPI, Query, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from tigeropen.common.consts import BarPeriod, Language
 from tigeropen.quote.quote_client import QuoteClient
 from tigeropen.tiger_open_config import TigerOpenClientConfig
@@ -412,3 +414,16 @@ async def ws_quotes(websocket: WebSocket, symbol: str = Query("CL", min_length=1
             await websocket.close()
         except Exception:
             pass
+
+
+# ── Serve frontend static build (if available) ─────────────────
+_frontend_dist = _backend_root.parent / "frontend" / "dist"
+if _frontend_dist.is_dir():
+    app.mount("/assets", StaticFiles(directory=_frontend_dist / "assets"), name="static-assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        file = _frontend_dist / full_path
+        if full_path and file.is_file():
+            return FileResponse(file)
+        return FileResponse(_frontend_dist / "index.html")
