@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import './App.css'
 import { GENRE_MELODY, DEFAULT_GENRE_MELODY } from './melodyConfig'
 
@@ -338,6 +338,9 @@ function App() {
   const rippleTimerIdsRef = useRef<number[]>([])
   const [ripples, setRipples] = useState<TickRipple[]>([])
 
+  const [showSettings, setShowSettings] = useState(false)
+  const toggleSettings = useCallback(() => setShowSettings(s => !s), [])
+
   const genre = useMemo(
     () => GENRES.find((g) => g.id === genreId) ?? GENRES[0],
     [genreId],
@@ -366,6 +369,8 @@ function App() {
       }
     }
   }, [])
+
+
 
   useEffect(() => {
     canvasThemeRef.current = visualTheme.canvas
@@ -1183,131 +1188,64 @@ function App() {
         <div className="scene-grid" />
       </div>
 
-      <section className="top-card panel-card">
-        <h1>The Sound of Markets</h1>
-        <p className="sub">
-          Every tick has a voice. Stream live prices and let the market sing — turning volatility into melody, momentum into rhythm, and chaos into music.
-        </p>
-
-        <div className="controls-grid">
-          <label>
-            Symbol
-            <select value={symbol} onChange={(e) => setSymbol(e.target.value)}>
-              <optgroup label="Futures">
-                <option value="CL">CL — WTI Crude Oil</option>
-                <option value="GC">GC — Gold</option>
-                <option value="SI">SI — Silver</option>
-                <option value="NG">NG — Natural Gas</option>
-                <option value="HG">HG — Copper</option>
-                <option value="ES">ES — S&P 500 E-mini</option>
-                <option value="NQ">NQ — Nasdaq 100 E-mini</option>
-                <option value="YM">YM — Dow Jones E-mini</option>
-                <option value="6B">6B — British Pound</option>
-                <option value="HSI">HSI — Hang Seng Index</option>
-              </optgroup>
-              <optgroup label="US Stocks">
-                <option value="AAPL">AAPL — Apple</option>
-                <option value="TSLA">TSLA — Tesla</option>
-                <option value="NVDA">NVDA — NVIDIA</option>
-                <option value="MSFT">MSFT — Microsoft</option>
-                <option value="AMZN">AMZN — Amazon</option>
-                <option value="GOOGL">GOOGL — Google</option>
-                <option value="META">META — Meta</option>
-                <option value="AMD">AMD — AMD</option>
-                <option value="PLTR">PLTR — Palantir</option>
-                <option value="COIN">COIN — Coinbase</option>
-              </optgroup>
-            </select>
-          </label>
-
-          <label>
-            Genre
-            <select value={genreId} onChange={(e) => setGenreId(e.target.value)}>
-              {GENRES.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label>
-            A/B Mode
-            <select value={abMode} onChange={(e) => setAbMode(e.target.value as ABMode)}>
-              <option value="raw">Raw market</option>
-              <option value="smoothed">Smoothed composition</option>
-            </select>
-          </label>
+      {/* ── Hero: K-line chart fills first screen ── */}
+      <section className="chart-hero panel-card">
+        {/* Compact top bar overlaying the chart */}
+        <div className="chart-top-bar">
+          <select className="compact-select" value={symbol} onChange={(e) => setSymbol(e.target.value)}>
+            <optgroup label="Futures">
+              <option value="CL">CL — Crude Oil</option>
+              <option value="GC">GC — Gold</option>
+              <option value="SI">SI — Silver</option>
+              <option value="NG">NG — Nat Gas</option>
+              <option value="HG">HG — Copper</option>
+              <option value="ES">ES — S&P 500</option>
+              <option value="NQ">NQ — Nasdaq</option>
+              <option value="YM">YM — Dow Jones</option>
+              <option value="6B">6B — GBP</option>
+              <option value="HSI">HSI — HSI</option>
+            </optgroup>
+            <optgroup label="US Stocks">
+              <option value="AAPL">AAPL — Apple</option>
+              <option value="TSLA">TSLA — Tesla</option>
+              <option value="NVDA">NVDA — NVIDIA</option>
+              <option value="MSFT">MSFT — Microsoft</option>
+              <option value="AMZN">AMZN — Amazon</option>
+              <option value="GOOGL">GOOGL — Google</option>
+              <option value="META">META — Meta</option>
+              <option value="AMD">AMD — AMD</option>
+              <option value="PLTR">PLTR — Palantir</option>
+              <option value="COIN">COIN — Coinbase</option>
+            </optgroup>
+          </select>
+          <select className="compact-select" value={genreId} onChange={(e) => setGenreId(e.target.value)}>
+            {GENRES.map((item) => (
+              <option key={item.id} value={item.id}>{item.name}</option>
+            ))}
+          </select>
+          {!isRunning ? (
+            <button className="btn-play" onClick={start}>▶ Click to enjoy~</button>
+          ) : (
+            <button className="btn-stop" onClick={stopAll} aria-label="Stop">■</button>
+          )}
         </div>
 
-        <div className="slider-row">
-          <label htmlFor="fidelity">Fidelity: Musical ↔ Analytical</label>
-          <input
-            id="fidelity"
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={fidelity}
-            onChange={(e) => setFidelity(Number(e.target.value))}
-          />
-          <span>{Math.round(fidelity * 100)}%</span>
+        {/* Live price badge */}
+        <div className="price-badge">
+          {latest ? (
+            <>
+              <span className="price-symbol">{latest.symbol}</span>
+              <span className="price-value">${latest.price.toFixed(2)}</span>
+              <span className={`price-chg ${latest.chgPct >= 0 ? 'up' : 'down'}`}>
+                {latest.chgPct >= 0 ? '+' : ''}{latest.chgPct.toFixed(2)}%
+              </span>
+              <span className="price-mood">{mood}</span>
+            </>
+          ) : (
+            <span className="price-idle">Tap ▶ to start</span>
+          )}
         </div>
 
-        <div className="slider-row">
-          <label htmlFor="volume">Volume</label>
-          <input
-            id="volume"
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={volume}
-            onChange={(e) => setVolume(Number(e.target.value))}
-          />
-          <span>{Math.round(volume * 100)}%</span>
-        </div>
-
-        <div className="action-row">
-          <button onClick={start}>Start Live</button>
-          <button onClick={stopAll}>Stop</button>
-          <button onClick={() => startReplay(60)}>Replay 60s</button>
-          <button onClick={() => startReplay(120)}>Replay 120s</button>
-          <button onClick={() => startReplay(180)}>Replay 180s</button>
-          <button onClick={connectLive}>Back To Live</button>
-        </div>
-
-        <div className="status-grid">
-          <div>
-            <span className="k">Status</span>
-            <span className="v">{status}</span>
-          </div>
-          <div>
-            <span className="k">Mode</span>
-            <span className="v">{mode}</span>
-          </div>
-          <div>
-            <span className="k">Theory</span>
-            <span className="v">{genre.modeName}</span>
-          </div>
-          <div>
-            <span className="k">Running</span>
-            <span className="v">{isRunning ? 'Yes' : 'No'}</span>
-          </div>
-          <div>
-            <span className="k">Mood</span>
-            <span className="v">{mood}</span>
-          </div>
-          <div>
-            <span className="k">Latest</span>
-            <span className="v">
-              {latest ? `${latest.symbol} $${latest.price.toFixed(2)} / ${latest.chgPct.toFixed(2)}%` : '--'}
-            </span>
-          </div>
-        </div>
-      </section>
-
-      <section className="chart-card panel-card">
         <canvas ref={chartRef} />
         <div className="chart-overlay" aria-hidden="true">
           {ripples.map((ripple) => (
@@ -1327,6 +1265,61 @@ function App() {
         </div>
       </section>
 
+      {/* ── Collapsible settings panel ── */}
+      <button className="settings-toggle" onClick={toggleSettings}>
+        {showSettings ? '▾ Hide Controls' : '▸ Controls & Settings'}
+        <span className="settings-status-hint">{status}</span>
+      </button>
+
+      {showSettings && (
+        <section className="settings-panel panel-card">
+          <div className="settings-section">
+            <h3>Sound</h3>
+            <div className="settings-row">
+              <label>
+                A/B Mode
+                <select value={abMode} onChange={(e) => setAbMode(e.target.value as ABMode)}>
+                  <option value="raw">Raw market</option>
+                  <option value="smoothed">Smoothed</option>
+                </select>
+              </label>
+            </div>
+            <div className="slider-row">
+              <label htmlFor="fidelity">Fidelity</label>
+              <input id="fidelity" type="range" min={0} max={1} step={0.01} value={fidelity} onChange={(e) => setFidelity(Number(e.target.value))} />
+              <span>{Math.round(fidelity * 100)}%</span>
+            </div>
+            <div className="slider-row">
+              <label htmlFor="volume">Volume</label>
+              <input id="volume" type="range" min={0} max={1} step={0.01} value={volume} onChange={(e) => setVolume(Number(e.target.value))} />
+              <span>{Math.round(volume * 100)}%</span>
+            </div>
+          </div>
+
+          <div className="settings-section">
+            <h3>Replay</h3>
+            <div className="action-row">
+              <button onClick={() => startReplay(60)}>60s</button>
+              <button onClick={() => startReplay(120)}>120s</button>
+              <button onClick={() => startReplay(180)}>180s</button>
+              <button onClick={connectLive}>Back To Live</button>
+            </div>
+          </div>
+
+          <div className="settings-section">
+            <h3>Status</h3>
+            <div className="status-grid">
+              <div><span className="k">Status</span><span className="v">{status}</span></div>
+              <div><span className="k">Mode</span><span className="v">{mode}</span></div>
+              <div><span className="k">Theory</span><span className="v">{genre.modeName}</span></div>
+              <div><span className="k">Running</span><span className="v">{isRunning ? 'Yes' : 'No'}</span></div>
+              <div><span className="k">Mood</span><span className="v">{mood}</span></div>
+              <div><span className="k">Latest</span><span className="v">{latest ? `$${latest.price.toFixed(2)}` : '--'}</span></div>
+            </div>
+          </div>
+        </section>
+      )}
+
       <section className="disclaimer-card panel-card">
         <p>
           Disclaimer (EN): This audio visualization is for creative and informational purposes only and does not
@@ -1334,7 +1327,7 @@ function App() {
         </p>
       </section>
 
-      <footer style={{ textAlign: 'center', padding: '16px 12px 24px', color: '#6aa8b8', fontSize: '0.85rem', opacity: 0.75 }}>
+      <footer style={{ textAlign: 'center', padding: '10px 12px 20px', color: '#6aa8b8', fontSize: '0.78rem', opacity: 0.75 }}>
         <p style={{ margin: 0 }}>Created by <strong style={{ color: '#a0dce8' }}>Ooopsyi</strong> with massive thanks to <strong style={{ color: '#a0dce8' }}>Claude Opus 4.6</strong>, a real hero to humanity ✨</p>
       </footer>
     </main>
