@@ -200,6 +200,132 @@ function playNote(
   osc.stop(startTime + duration + 0.05)
 }
 
+/** Compute per-day returns from bars */
+function dailyReturns(bars: DayBar[]): number[] {
+  const r = [0]
+  for (let i = 1; i < bars.length; i++) {
+    r.push((bars[i].close - bars[i - 1].close) / bars[i - 1].close)
+  }
+  return r
+}
+
+/**
+ * Mournful cello — sawtooth + vibrato LFO, warm low-pass filter
+ * Plays a short descending minor phrase in C3-C4 register
+ */
+function playCello(
+  ctx: AudioContext, dest: GainNode, reverb: ConvolverNode,
+  startTime: number, intensity: number, speed: number,
+) {
+  // Descending minor lament: A3 → G3 → F3 → E3 → D3
+  const phrase = [0, -2, -4, -5, -7]
+  const noteDur = (0.6 / speed)
+  const gain = 0.025 * (0.6 + intensity * 0.6)
+
+  phrase.forEach((semi, i) => {
+    const t = startTime + i * noteDur * 0.85 // slight overlap for legato
+    const freq = noteFreq(semi) // A3 register
+
+    const osc = ctx.createOscillator()
+    const g = ctx.createGain()
+    const filter = ctx.createBiquadFilter()
+
+    // Sawtooth gives cello-like harmonic richness
+    osc.type = 'sawtooth'
+    osc.frequency.setValueAtTime(freq, t)
+
+    // Vibrato: LFO modulating pitch ~5Hz, ±6 cents
+    const lfo = ctx.createOscillator()
+    const lfoGain = ctx.createGain()
+    lfo.type = 'sine'
+    lfo.frequency.setValueAtTime(5.2, t)
+    lfoGain.gain.setValueAtTime(8, t)  // cents of vibrato depth
+    lfo.connect(lfoGain)
+    lfoGain.connect(osc.detune)
+    lfo.start(t)
+    lfo.stop(t + noteDur + 0.3)
+
+    // Warm low-pass: cello body resonance
+    filter.type = 'lowpass'
+    filter.frequency.setValueAtTime(700 + intensity * 300, t)
+    filter.Q.setValueAtTime(1.2, t)
+
+    // Slow bow-like attack, sustained, gentle release
+    g.gain.setValueAtTime(0.0001, t)
+    g.gain.linearRampToValueAtTime(gain, t + 0.12)
+    g.gain.setTargetAtTime(gain * 0.7, t + 0.12, noteDur * 0.4)
+    g.gain.exponentialRampToValueAtTime(0.0001, t + noteDur)
+
+    osc.connect(g)
+    g.connect(filter)
+
+    // Pan slightly right for spatial separation from piano
+    const panner = ctx.createStereoPanner()
+    panner.pan.setValueAtTime(0.25, t)
+    filter.connect(panner)
+    panner.connect(dest)
+    panner.connect(reverb)
+
+    osc.start(t)
+    osc.stop(t + noteDur + 0.1)
+  })
+}
+
+/**
+ * Urgent drum hits — rapid noise bursts with pitched bandpass
+ * Creates an anxious, driving percussion flurry
+ */
+function playUrgentDrums(
+  ctx: AudioContext, dest: GainNode,
+  startTime: number, intensity: number, speed: number,
+) {
+  const numHits = 6 + Math.floor(intensity * 6) // 6–12 rapid hits
+  const interval = (0.07 / speed)                // very fast
+  const baseGain = 0.04 * (0.5 + intensity * 0.7)
+
+  for (let i = 0; i < numHits; i++) {
+    const t = startTime + i * interval
+    // Accent pattern: first hit and every 3rd hit louder
+    const accent = (i === 0 || i % 3 === 0) ? 1.3 : 0.8
+    const hitGain = baseGain * accent * (1 - i / numHits * 0.3) // fade slightly
+
+    // Low kick body (sine thump)
+    const kick = ctx.createOscillator()
+    const kickG = ctx.createGain()
+    kick.type = 'sine'
+    kick.frequency.setValueAtTime(120, t)
+    kick.frequency.exponentialRampToValueAtTime(50, t + 0.06)
+    kickG.gain.setValueAtTime(hitGain, t)
+    kickG.gain.exponentialRampToValueAtTime(0.0001, t + 0.08)
+    kick.connect(kickG)
+    kickG.connect(dest)
+    kick.start(t)
+    kick.stop(t + 0.1)
+
+    // Noise snap (attack transient)
+    const snapLen = 0.025
+    const nBuf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * snapLen), ctx.sampleRate)
+    const nData = nBuf.getChannelData(0)
+    for (let j = 0; j < nData.length; j++) {
+      nData[j] = (Math.random() * 2 - 1) * Math.pow(1 - j / nData.length, 3)
+    }
+    const nSrc = ctx.createBufferSource()
+    nSrc.buffer = nBuf
+    const nGain = ctx.createGain()
+    const nFilter = ctx.createBiquadFilter()
+    nFilter.type = 'bandpass'
+    nFilter.frequency.setValueAtTime(200 + i * 40, t) // pitch rises with urgency
+    nFilter.Q.setValueAtTime(2, t)
+    nGain.gain.setValueAtTime(hitGain * 0.7, t)
+    nGain.gain.exponentialRampToValueAtTime(0.0001, t + snapLen)
+    nSrc.connect(nGain)
+    nGain.connect(nFilter)
+    nFilter.connect(dest)
+    nSrc.start(t)
+    nSrc.stop(t + snapLen + 0.01)
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════
 //  MUSIC THEORY — pre-composed melodic phrases per emotion
 // ═══════════════════════════════════════════════════════════════
@@ -308,6 +434,10 @@ function scheduleSakamoto(
 ): { stop: () => void } {
   let cancelled = false
   let scheduleTime = ctx.currentTime + 0.3
+
+  // Pre-compute returns for big-drop detection
+  const returns = dailyReturns(_bars)
+  const BIG_DROP = -0.025 // -2.5% threshold for 大阴线
 
   // Wet gain for reverb
   const wetGain = ctx.createGain()
@@ -430,6 +560,16 @@ function scheduleSakamoto(
         })
       }
 
+      // ── Layer 4: Mournful Cello on 大阴线 (big bearish candle) ──
+      if (b % 2 === 0) {
+        const dayIdx = chapter.startIdx + Math.floor(b / 2)
+        if (dayIdx < returns.length && returns[dayIdx] < BIG_DROP) {
+          const dropMag = Math.abs(returns[dayIdx]) // larger drop → more intensity
+          playCello(ctx, master, reverb, beatTime + 0.05,
+            clamp(dropMag * 15, 0.3, 1), speed)
+        }
+      }
+
       // Schedule progress callback for each "day"
       if (b % 2 === 0) {
         const dayIdx = chapter.startIdx + Math.floor(b / 2)
@@ -497,6 +637,10 @@ function scheduleZimmer(
 ): { stop: () => void } {
   let cancelled = false
   let scheduleTime = ctx.currentTime + 0.3
+
+  // Pre-compute returns for big-drop detection
+  const returns = dailyReturns(_bars)
+  const BIG_DROP = -0.025 // -2.5% threshold for 大阴线
 
   // Less reverb for Zimmer (drier, more in-your-face)
   const wetGain = ctx.createGain()
@@ -688,6 +832,18 @@ function scheduleZimmer(
         nGain.connect(master)
         nSrc.start(beatTime)
         nSrc.stop(beatTime + noiseLen + 0.02)
+      }
+
+      // ── Urgent drums on 大阴线 (big bearish candle) ──
+      const beatsPerDay = chapterBeats / chLen
+      const zimDayIdx = chapter.startIdx + Math.min(Math.floor(b / beatsPerDay), chLen - 1)
+      // Trigger once per big-drop day (on the first beat of that day)
+      if (Math.floor(b / beatsPerDay) !== Math.floor((b - 1) / beatsPerDay) || b === 0) {
+        if (zimDayIdx < returns.length && returns[zimDayIdx] < BIG_DROP) {
+          const dropMag = Math.abs(returns[zimDayIdx])
+          playUrgentDrums(ctx, master, beatTime,
+            clamp(dropMag * 15, 0.3, 1), speed)
+        }
       }
 
       // Progress callbacks
