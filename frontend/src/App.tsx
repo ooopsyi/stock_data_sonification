@@ -1514,14 +1514,36 @@ function App() {
                   <option value="CL">CL — Crude Oil</option>
                   <option value="GC">GC — Gold</option>
                   <option value="SI">SI — Silver</option>
+                  <option value="NG">NG — Nat Gas</option>
+                  <option value="HG">HG — Copper</option>
                   <option value="ES">ES — S&P 500</option>
                   <option value="NQ">NQ — Nasdaq</option>
+                  <option value="YM">YM — Dow Jones</option>
                 </optgroup>
                 <optgroup label="US Stocks">
-                  <option value="AAPL">AAPL — Apple</option>
                   <option value="TSLA">TSLA — Tesla</option>
                   <option value="NVDA">NVDA — NVIDIA</option>
+                  <option value="AMD">AMD — AMD</option>
+                  <option value="COIN">COIN — Coinbase</option>
+                  <option value="PLTR">PLTR — Palantir</option>
+                  <option value="MSTR">MSTR — MicroStrategy</option>
+                  <option value="SMCI">SMCI — Super Micro</option>
+                  <option value="GME">GME — GameStop</option>
+                  <option value="MARA">MARA — Marathon Digital</option>
+                  <option value="HOOD">HOOD — Robinhood</option>
+                  <option value="RIVN">RIVN — Rivian</option>
+                  <option value="UPST">UPST — Upstart</option>
+                  <option value="AAPL">AAPL — Apple</option>
                   <option value="MSFT">MSFT — Microsoft</option>
+                  <option value="AMZN">AMZN — Amazon</option>
+                  <option value="GOOGL">GOOGL — Google</option>
+                  <option value="META">META — Meta</option>
+                </optgroup>
+                <optgroup label="Leveraged ETF">
+                  <option value="SOXL">SOXL — 3x Semicond</option>
+                  <option value="TQQQ">TQQQ — 3x Nasdaq</option>
+                  <option value="SQQQ">SQQQ — -3x Nasdaq</option>
+                  <option value="UVXY">UVXY — 1.5x VIX</option>
                 </optgroup>
               </select>
 
@@ -1593,11 +1615,10 @@ function App() {
         </>
       )}
 
-      <section className="disclaimer-card panel-card">
-        <p>
-          Disclaimer (EN): This audio visualization is for creative and informational purposes only and does not
-          constitute investment advice.
-        </p>
+      <section className="disclaimer-card panel-card" style={{ textAlign: 'center' }}>
+        <h2 style={{ margin: '0 0 6px', fontSize: '1.1rem', color: '#a0dce8' }}>The Sound of Markets</h2>
+        <p style={{ margin: '0 0 6px', fontSize: '0.85rem', opacity: 0.8 }}>Every tick has a voice. Stream live prices and let the market sing.</p>
+        <p style={{ margin: 0, fontSize: '0.75rem', opacity: 0.55 }}>Not an investment advice.</p>
       </section>
 
       <footer style={{ textAlign: 'center', padding: '10px 12px 20px', color: '#6aa8b8', fontSize: '0.78rem', opacity: 0.75 }}>

@@ -433,6 +433,9 @@ async def get_history(symbol: str) -> dict:
             "AAPL": 228.0, "TSLA": 340.0, "NVDA": 130.0, "MSFT": 420.0,
             "AMZN": 200.0, "GOOGL": 180.0, "META": 580.0, "AMD": 120.0,
             "PLTR": 78.0, "COIN": 260.0,
+            "MSTR": 320.0, "SMCI": 45.0, "GME": 28.0, "MARA": 18.0,
+            "HOOD": 42.0, "RIVN": 14.0, "UPST": 62.0,
+            "SOXL": 22.0, "TQQQ": 68.0, "SQQQ": 10.0, "UVXY": 28.0,
         }
         base_price = _base_prices.get(ticker, random.uniform(80, 350))
         price = base_price
