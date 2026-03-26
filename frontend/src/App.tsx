@@ -1166,7 +1166,8 @@ function App() {
     const ticker = symbol.trim().toUpperCase() || 'CL'
     setHistoryLoading(true)
     try {
-      const resp = await fetch(`http://${API_HOST}/api/history/${encodeURIComponent(ticker)}`)
+      const apiProtocol = window.location.protocol === 'https:' ? 'https' : 'http'
+      const resp = await fetch(`${apiProtocol}://${API_HOST}/api/history/${encodeURIComponent(ticker)}`)
       const data = await resp.json()
       if (data.bars && data.bars.length > 0) {
         setHistoryBars(data.bars)
