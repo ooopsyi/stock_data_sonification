@@ -1314,10 +1314,15 @@ function App() {
     if (viewMode === 'live' && isRunning) stopAll()
     if (viewMode === 'history' && historyPlaying) stopHistory()
     setViewMode(m)
-    if (m === 'history' && historyBars.length === 0) {
+  }
+
+  // Auto-fetch history data when symbol changes in history mode
+  useEffect(() => {
+    if (viewMode === 'history') {
       fetchHistory()
     }
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbol, viewMode])
 
   // Cleanup history player on unmount
   useEffect(() => {
@@ -1509,7 +1514,7 @@ function App() {
           {/* ══════ HISTORY MODE ══════ */}
           <section className="chart-hero panel-card">
             <div className="chart-top-bar">
-              <select className="compact-select" value={symbol} onChange={(e) => { setSymbol(e.target.value); setHistoryBars([]); }}>
+              <select className="compact-select" value={symbol} onChange={(e) => { if (historyPlaying) stopHistory(); setSymbol(e.target.value); setHistoryBars([]); }}>
                 <optgroup label="Futures">
                   <option value="CL">CL — Crude Oil</option>
                   <option value="GC">GC — Gold</option>
