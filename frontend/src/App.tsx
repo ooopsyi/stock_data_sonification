@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import './App.css'
 import { GENRE_MELODY, DEFAULT_GENRE_MELODY } from './melodyConfig'
+import { HistoryPlayer, type HistoryStyle, type DayBar } from './historyPlayer'
 
 type Mood = 'Calm' | 'Bullish' | 'Bearish' | 'Turbulent'
 type StreamMode = 'live' | 'replay'
@@ -340,6 +341,18 @@ function App() {
 
   const [showSettings, setShowSettings] = useState(false)
   const toggleSettings = useCallback(() => setShowSettings(s => !s), [])
+
+  // ── History mode state ──
+  const [viewMode, setViewMode] = useState<'live' | 'history'>('live')
+  const [historyStyle, setHistoryStyle] = useState<HistoryStyle>('sakamoto')
+  const [historyBars, setHistoryBars] = useState<DayBar[]>([])
+  const [historyDay, setHistoryDay] = useState(-1)
+  const [historyTotal, setHistoryTotal] = useState(0)
+  const [historyPlaying, setHistoryPlaying] = useState(false)
+  const [historySpeed, setHistorySpeed] = useState(1)
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const historyPlayerRef = useRef<HistoryPlayer>(new HistoryPlayer())
+  const historyCanvasRef = useRef<HTMLCanvasElement | null>(null)
 
   const genre = useMemo(
     () => GENRES.find((g) => g.id === genreId) ?? GENRES[0],
@@ -1148,6 +1161,168 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol])
 
+  // ── History mode functions ──────────────────────────────
+  async function fetchHistory() {
+    const ticker = symbol.trim().toUpperCase() || 'CL'
+    setHistoryLoading(true)
+    try {
+      const resp = await fetch(`http://${API_HOST}/api/history/${encodeURIComponent(ticker)}`)
+      const data = await resp.json()
+      if (data.bars && data.bars.length > 0) {
+        setHistoryBars(data.bars)
+        setHistoryDay(-1)
+        setHistoryTotal(data.bars.length)
+        drawHistoryCandles(data.bars, -1)
+      } else {
+        setHistoryBars([])
+        setStatus('No history data available')
+      }
+    } catch {
+      setStatus('Failed to fetch history')
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
+  function drawHistoryCandles(bars: DayBar[], highlightIdx: number) {
+    const canvas = historyCanvasRef.current
+    if (!canvas || bars.length === 0) return
+
+    const width = canvas.clientWidth
+    const height = canvas.clientHeight
+    if (width < 10 || height < 10) return
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width
+      canvas.height = height
+    }
+    const ctx2d = canvas.getContext('2d')
+    if (!ctx2d) return
+
+    const isSak = historyStyle === 'sakamoto'
+    const bgTop = isSak ? '#0a1520' : '#1a0f08'
+    const bgBot = isSak ? '#08131f' : '#12080a'
+    const gridColor = isSak ? 'rgba(100,180,220,0.06)' : 'rgba(220,160,80,0.06)'
+    const upColor = isSak ? '#4da8c7' : '#e88a3a'
+    const downColor = isSak ? '#a0d0e6' : '#c44a2e'
+    const wickUp = isSak ? '#6ac0da' : '#f0a050'
+    const wickDown = isSak ? '#b8dbe8' : '#d05a38'
+    const hlColor = isSak ? 'rgba(100,200,255,0.25)' : 'rgba(255,160,60,0.25)'
+
+    ctx2d.clearRect(0, 0, width, height)
+    const grad = ctx2d.createLinearGradient(0, 0, 0, height)
+    grad.addColorStop(0, bgTop)
+    grad.addColorStop(1, bgBot)
+    ctx2d.fillStyle = grad
+    ctx2d.fillRect(0, 0, width, height)
+
+    // Grid
+    ctx2d.strokeStyle = gridColor
+    ctx2d.lineWidth = 1
+    for (let x = 0; x < width; x += 32) { ctx2d.beginPath(); ctx2d.moveTo(x, 0); ctx2d.lineTo(x, height); ctx2d.stroke() }
+    for (let y = 0; y < height; y += 28) { ctx2d.beginPath(); ctx2d.moveTo(0, y); ctx2d.lineTo(width, y); ctx2d.stroke() }
+
+    const candleBody = Math.max(3, Math.min(9, Math.floor(width / bars.length) - 2))
+    const gap = 1
+    const step = candleBody + gap
+    const totalWidth = bars.length * step
+    const offsetX = Math.max(0, width - totalWidth)
+
+    const highs = bars.map(b => b.high)
+    const lows = bars.map(b => b.low)
+    const maxP = Math.max(...highs)
+    const minP = Math.min(...lows)
+    const pad = (maxP - minP) * 0.08 + 0.001
+    const top = maxP + pad
+    const bottom = minP - pad
+    const span = top - bottom
+
+    for (let i = 0; i < bars.length; i++) {
+      const b = bars[i]
+      const cx = offsetX + i * step + candleBody / 2
+      const wickTop = ((top - b.high) / span) * height
+      const wickBot = ((top - b.low) / span) * height
+      const openY = ((top - b.open) / span) * height
+      const closeY = ((top - b.close) / span) * height
+      const up = b.close >= b.open
+
+      // Highlight played candle
+      if (highlightIdx >= 0 && i <= highlightIdx) {
+        ctx2d.fillStyle = i === highlightIdx ? hlColor : (isSak ? 'rgba(70,150,200,0.08)' : 'rgba(200,120,40,0.08)')
+        ctx2d.fillRect(cx - candleBody / 2 - 1, 0, candleBody + 2, height)
+      }
+
+      ctx2d.strokeStyle = up ? wickUp : wickDown
+      ctx2d.lineWidth = 1
+      ctx2d.beginPath()
+      ctx2d.moveTo(cx, wickTop)
+      ctx2d.lineTo(cx, wickBot)
+      ctx2d.stroke()
+
+      const bodyTop = Math.min(openY, closeY)
+      const bodyHeight = Math.max(1, Math.abs(closeY - openY))
+      ctx2d.fillStyle = up ? upColor : downColor
+      ctx2d.fillRect(cx - candleBody / 2, bodyTop, candleBody, bodyHeight)
+    }
+
+    // Progress line
+    if (highlightIdx >= 0) {
+      const px = offsetX + highlightIdx * step + candleBody / 2
+      ctx2d.strokeStyle = isSak ? 'rgba(120,210,255,0.5)' : 'rgba(255,180,80,0.5)'
+      ctx2d.lineWidth = 1.5
+      ctx2d.setLineDash([4, 3])
+      ctx2d.beginPath()
+      ctx2d.moveTo(px, 0)
+      ctx2d.lineTo(px, height)
+      ctx2d.stroke()
+      ctx2d.setLineDash([])
+    }
+  }
+
+  // Redraw history candles when style or day changes
+  useEffect(() => {
+    if (viewMode === 'history' && historyBars.length > 0) {
+      drawHistoryCandles(historyBars, historyDay)
+    }
+  }, [historyBars, historyDay, historyStyle, viewMode])
+
+  function startHistory() {
+    if (historyBars.length === 0) return
+    const player = historyPlayerRef.current
+    player.setProgressCallback((s) => {
+      setHistoryDay(s.currentDay)
+      setHistoryPlaying(s.isPlaying)
+      setHistoryTotal(s.totalDays)
+      if (!s.isPlaying) {
+        setStatus('History playback finished')
+      }
+    })
+    player.start(historyBars, historyStyle, historySpeed, volume)
+    setHistoryPlaying(true)
+    setStatus(`Playing ${historyStyle === 'sakamoto' ? 'Sakamoto Rain' : 'Zimmer F1'}...`)
+  }
+
+  function stopHistory() {
+    historyPlayerRef.current.stop()
+    setHistoryPlaying(false)
+    setStatus('History stopped')
+  }
+
+  function switchViewMode(m: 'live' | 'history') {
+    if (m === viewMode) return
+    // Stop current playback
+    if (viewMode === 'live' && isRunning) stopAll()
+    if (viewMode === 'history' && historyPlaying) stopHistory()
+    setViewMode(m)
+    if (m === 'history' && historyBars.length === 0) {
+      fetchHistory()
+    }
+  }
+
+  // Cleanup history player on unmount
+  useEffect(() => {
+    return () => { historyPlayerRef.current.stop() }
+  }, [])
+
   function start() {
     initAudio()
     connectLive()
@@ -1181,143 +1356,240 @@ function App() {
   }
 
   return (
-    <main className="app-shell" style={sceneStyle}>
+    <main className={`app-shell ${viewMode === 'history' ? `history-mode history-${historyStyle}` : ''}`} style={sceneStyle}>
       <div className="scene-backdrop" aria-hidden="true">
         <div className="scene-orb scene-orb-primary" />
         <div className="scene-orb scene-orb-secondary" />
         <div className="scene-grid" />
       </div>
 
-      {/* ── Hero: K-line chart fills first screen ── */}
-      <section className="chart-hero panel-card">
-        {/* Compact top bar overlaying the chart */}
-        <div className="chart-top-bar">
-          <select className="compact-select" value={symbol} onChange={(e) => setSymbol(e.target.value)}>
-            <optgroup label="Futures">
-              <option value="CL">CL — Crude Oil</option>
-              <option value="GC">GC — Gold</option>
-              <option value="SI">SI — Silver</option>
-              <option value="NG">NG — Nat Gas</option>
-              <option value="HG">HG — Copper</option>
-              <option value="ES">ES — S&P 500</option>
-              <option value="NQ">NQ — Nasdaq</option>
-              <option value="YM">YM — Dow Jones</option>
-              <option value="6B">6B — GBP</option>
-              <option value="HSI">HSI — HSI</option>
-            </optgroup>
-            <optgroup label="US Stocks">
-              <option value="AAPL">AAPL — Apple</option>
-              <option value="TSLA">TSLA — Tesla</option>
-              <option value="NVDA">NVDA — NVIDIA</option>
-              <option value="MSFT">MSFT — Microsoft</option>
-              <option value="AMZN">AMZN — Amazon</option>
-              <option value="GOOGL">GOOGL — Google</option>
-              <option value="META">META — Meta</option>
-              <option value="AMD">AMD — AMD</option>
-              <option value="PLTR">PLTR — Palantir</option>
-              <option value="COIN">COIN — Coinbase</option>
-            </optgroup>
-          </select>
-          <select className="compact-select" value={genreId} onChange={(e) => setGenreId(e.target.value)}>
-            {GENRES.map((item) => (
-              <option key={item.id} value={item.id}>{item.name}</option>
+      {/* ── View mode toggle pill ── */}
+      <div className="view-mode-toggle">
+        <div className="view-mode-toggle-inner">
+          <button className={`vmt-btn ${viewMode === 'live' ? 'active' : ''}`} onClick={() => switchViewMode('live')}>Live</button>
+          <button className={`vmt-btn ${viewMode === 'history' ? 'active' : ''}`} onClick={() => switchViewMode('history')}>History</button>
+        </div>
+      </div>
+
+      {viewMode === 'live' ? (
+        <>
+          {/* ── Hero: K-line chart fills first screen ── */}
+          <section className="chart-hero panel-card">
+            {/* Compact top bar overlaying the chart */}
+            <div className="chart-top-bar">
+              <select className="compact-select" value={symbol} onChange={(e) => setSymbol(e.target.value)}>
+                <optgroup label="Futures">
+                  <option value="CL">CL — Crude Oil</option>
+                  <option value="GC">GC — Gold</option>
+                  <option value="SI">SI — Silver</option>
+                  <option value="NG">NG — Nat Gas</option>
+                  <option value="HG">HG — Copper</option>
+                  <option value="ES">ES — S&P 500</option>
+                  <option value="NQ">NQ — Nasdaq</option>
+                  <option value="YM">YM — Dow Jones</option>
+                  <option value="6B">6B — GBP</option>
+                  <option value="HSI">HSI — HSI</option>
+                </optgroup>
+                <optgroup label="US Stocks">
+                  <option value="AAPL">AAPL — Apple</option>
+                  <option value="TSLA">TSLA — Tesla</option>
+                  <option value="NVDA">NVDA — NVIDIA</option>
+                  <option value="MSFT">MSFT — Microsoft</option>
+                  <option value="AMZN">AMZN — Amazon</option>
+                  <option value="GOOGL">GOOGL — Google</option>
+                  <option value="META">META — Meta</option>
+                  <option value="AMD">AMD — AMD</option>
+                  <option value="PLTR">PLTR — Palantir</option>
+                  <option value="COIN">COIN — Coinbase</option>
+                </optgroup>
+              </select>
+              <select className="compact-select" value={genreId} onChange={(e) => setGenreId(e.target.value)}>
+                {GENRES.map((item) => (
+                  <option key={item.id} value={item.id}>{item.name}</option>
+                ))}
+              </select>
+              {!isRunning ? (
+                <button className="btn-play" onClick={start}>▶ Click to enjoy~</button>
+              ) : (
+                <button className="btn-stop" onClick={stopAll} aria-label="Stop">■</button>
+              )}
+            </div>
+
+            {/* Live price badge */}
+            <div className="price-badge">
+              {latest && (
+                <>
+                  <span className="price-symbol">{latest.symbol}</span>
+                  <span className="price-value">${latest.price.toFixed(2)}</span>
+                  <span className={`price-chg ${latest.chgPct >= 0 ? 'up' : 'down'}`}>
+                    {latest.chgPct >= 0 ? '+' : ''}{latest.chgPct.toFixed(2)}%
+                  </span>
+                  <span className="price-mood">{mood}</span>
+                </>
+              )}
+            </div>
+
+            <canvas ref={chartRef} />
+            <div className="chart-overlay" aria-hidden="true">
+              {ripples.map((ripple) => (
+                <span
+                  key={ripple.id}
+                  className="tick-ripple"
+                  style={{
+                    left: `${ripple.x}%`,
+                    top: `${ripple.y}%`,
+                    width: `${ripple.size}px`,
+                    height: `${ripple.size}px`,
+                    borderColor: ripple.color,
+                    boxShadow: `0 0 18px ${ripple.glow}`,
+                  }}
+                />
+              ))}
+            </div>
+          </section>
+
+          {/* ── Collapsible settings panel ── */}
+          <button className="settings-toggle" onClick={toggleSettings}>
+            {showSettings ? '▾ Hide Controls' : '▸ Controls & Settings'}
+            <span className="settings-status-hint">{status}</span>
+          </button>
+
+          {showSettings && (
+            <section className="settings-panel panel-card">
+              <div className="settings-section">
+                <h3>Sound</h3>
+                <div className="settings-row">
+                  <label>
+                    A/B Mode
+                    <select value={abMode} onChange={(e) => setAbMode(e.target.value as ABMode)}>
+                      <option value="raw">Raw market</option>
+                      <option value="smoothed">Smoothed</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="slider-row">
+                  <label htmlFor="fidelity">Fidelity</label>
+                  <input id="fidelity" type="range" min={0} max={1} step={0.01} value={fidelity} onChange={(e) => setFidelity(Number(e.target.value))} />
+                  <span>{Math.round(fidelity * 100)}%</span>
+                </div>
+                <div className="slider-row">
+                  <label htmlFor="volume">Volume</label>
+                  <input id="volume" type="range" min={0} max={1} step={0.01} value={volume} onChange={(e) => setVolume(Number(e.target.value))} />
+                  <span>{Math.round(volume * 100)}%</span>
+                </div>
+              </div>
+
+              <div className="settings-section">
+                <h3>Replay</h3>
+                <div className="action-row">
+                  <button onClick={() => startReplay(60)}>60s</button>
+                  <button onClick={() => startReplay(120)}>120s</button>
+                  <button onClick={() => startReplay(180)}>180s</button>
+                  <button onClick={connectLive}>Back To Live</button>
+                </div>
+              </div>
+
+              <div className="settings-section">
+                <h3>Status</h3>
+                <div className="status-grid">
+                  <div><span className="k">Status</span><span className="v">{status}</span></div>
+                  <div><span className="k">Mode</span><span className="v">{mode}</span></div>
+                  <div><span className="k">Theory</span><span className="v">{genre.modeName}</span></div>
+                  <div><span className="k">Running</span><span className="v">{isRunning ? 'Yes' : 'No'}</span></div>
+                  <div><span className="k">Mood</span><span className="v">{mood}</span></div>
+                  <div><span className="k">Latest</span><span className="v">{latest ? `$${latest.price.toFixed(2)}` : '--'}</span></div>
+                </div>
+              </div>
+            </section>
+          )}
+        </>
+      ) : (
+        <>
+          {/* ══════ HISTORY MODE ══════ */}
+          <section className="chart-hero panel-card">
+            <div className="chart-top-bar">
+              <select className="compact-select" value={symbol} onChange={(e) => { setSymbol(e.target.value); setHistoryBars([]); }}>
+                <optgroup label="Futures">
+                  <option value="CL">CL — Crude Oil</option>
+                  <option value="GC">GC — Gold</option>
+                  <option value="SI">SI — Silver</option>
+                  <option value="ES">ES — S&P 500</option>
+                  <option value="NQ">NQ — Nasdaq</option>
+                </optgroup>
+                <optgroup label="US Stocks">
+                  <option value="AAPL">AAPL — Apple</option>
+                  <option value="TSLA">TSLA — Tesla</option>
+                  <option value="NVDA">NVDA — NVIDIA</option>
+                  <option value="MSFT">MSFT — Microsoft</option>
+                </optgroup>
+              </select>
+
+              <select className="compact-select" value={historyStyle} onChange={(e) => { if (historyPlaying) stopHistory(); setHistoryStyle(e.target.value as HistoryStyle) }}>
+                <option value="sakamoto">Sakamoto</option>
+                <option value="zimmer">Zimmer</option>
+              </select>
+
+              {!historyPlaying ? (
+                <button className="btn-play" onClick={() => { if (historyBars.length === 0) fetchHistory().then(() => setTimeout(startHistory, 200)); else startHistory() }} disabled={historyLoading}>
+                  {historyLoading ? '...' : '▶'}
+                </button>
+              ) : (
+                <button className="btn-stop" onClick={stopHistory} aria-label="Stop">■</button>
+              )}
+            </div>
+
+            {/* History info badge */}
+            <div className="price-badge history-badge">
+              {historyBars.length > 0 ? (
+                <>
+                  <span className="price-symbol">{symbol}</span>
+                  <span className="price-value">Daily K</span>
+                  <span className="price-mood">{historyDay >= 0 ? `Day ${historyDay + 1}/${historyTotal}` : `${historyTotal} days`}</span>
+                </>
+              ) : (
+                <span className="price-idle">{historyLoading ? 'Loading...' : 'Tap ▶ to load'}</span>
+              )}
+            </div>
+
+            <canvas ref={historyCanvasRef} />
+
+            {/* Progress bar */}
+            {historyTotal > 0 && (
+              <div className="history-progress">
+                <div
+                  className="history-progress-fill"
+                  style={{ width: `${historyDay >= 0 ? ((historyDay + 1) / historyTotal) * 100 : 0}%` }}
+                />
+              </div>
+            )}
+          </section>
+
+          {/* Speed control */}
+          <div className="history-controls">
+            <span className="hc-label">Speed</span>
+            {[0.5, 1, 2].map(s => (
+              <button
+                key={s}
+                className={`hc-speed ${historySpeed === s ? 'active' : ''}`}
+                onClick={() => {
+                  setHistorySpeed(s)
+                  if (historyPlaying) {
+                    stopHistory()
+                    setTimeout(() => {
+                      historyPlayerRef.current.start(historyBars, historyStyle, s, volume)
+                      setHistoryPlaying(true)
+                    }, 100)
+                  }
+                }}
+              >{s}x</button>
             ))}
-          </select>
-          {!isRunning ? (
-            <button className="btn-play" onClick={start}>▶ Click to enjoy~</button>
-          ) : (
-            <button className="btn-stop" onClick={stopAll} aria-label="Stop">■</button>
-          )}
-        </div>
-
-        {/* Live price badge */}
-        <div className="price-badge">
-          {latest ? (
-            <>
-              <span className="price-symbol">{latest.symbol}</span>
-              <span className="price-value">${latest.price.toFixed(2)}</span>
-              <span className={`price-chg ${latest.chgPct >= 0 ? 'up' : 'down'}`}>
-                {latest.chgPct >= 0 ? '+' : ''}{latest.chgPct.toFixed(2)}%
-              </span>
-              <span className="price-mood">{mood}</span>
-            </>
-          ) : (
-            <span className="price-idle">Tap ▶ to start</span>
-          )}
-        </div>
-
-        <canvas ref={chartRef} />
-        <div className="chart-overlay" aria-hidden="true">
-          {ripples.map((ripple) => (
-            <span
-              key={ripple.id}
-              className="tick-ripple"
-              style={{
-                left: `${ripple.x}%`,
-                top: `${ripple.y}%`,
-                width: `${ripple.size}px`,
-                height: `${ripple.size}px`,
-                borderColor: ripple.color,
-                boxShadow: `0 0 18px ${ripple.glow}`,
-              }}
-            />
-          ))}
-        </div>
-      </section>
-
-      {/* ── Collapsible settings panel ── */}
-      <button className="settings-toggle" onClick={toggleSettings}>
-        {showSettings ? '▾ Hide Controls' : '▸ Controls & Settings'}
-        <span className="settings-status-hint">{status}</span>
-      </button>
-
-      {showSettings && (
-        <section className="settings-panel panel-card">
-          <div className="settings-section">
-            <h3>Sound</h3>
-            <div className="settings-row">
-              <label>
-                A/B Mode
-                <select value={abMode} onChange={(e) => setAbMode(e.target.value as ABMode)}>
-                  <option value="raw">Raw market</option>
-                  <option value="smoothed">Smoothed</option>
-                </select>
-              </label>
-            </div>
-            <div className="slider-row">
-              <label htmlFor="fidelity">Fidelity</label>
-              <input id="fidelity" type="range" min={0} max={1} step={0.01} value={fidelity} onChange={(e) => setFidelity(Number(e.target.value))} />
-              <span>{Math.round(fidelity * 100)}%</span>
-            </div>
-            <div className="slider-row">
-              <label htmlFor="volume">Volume</label>
-              <input id="volume" type="range" min={0} max={1} step={0.01} value={volume} onChange={(e) => setVolume(Number(e.target.value))} />
-              <span>{Math.round(volume * 100)}%</span>
+            <button className="hc-reload" onClick={fetchHistory} disabled={historyLoading}>↻</button>
+            <div className="slider-row" style={{ flex: 1, minWidth: 80 }}>
+              <label htmlFor="hvol">Vol</label>
+              <input id="hvol" type="range" min={0} max={1} step={0.01} value={volume} onChange={(e) => { setVolume(Number(e.target.value)); historyPlayerRef.current.setVolume(Number(e.target.value)) }} />
             </div>
           </div>
-
-          <div className="settings-section">
-            <h3>Replay</h3>
-            <div className="action-row">
-              <button onClick={() => startReplay(60)}>60s</button>
-              <button onClick={() => startReplay(120)}>120s</button>
-              <button onClick={() => startReplay(180)}>180s</button>
-              <button onClick={connectLive}>Back To Live</button>
-            </div>
-          </div>
-
-          <div className="settings-section">
-            <h3>Status</h3>
-            <div className="status-grid">
-              <div><span className="k">Status</span><span className="v">{status}</span></div>
-              <div><span className="k">Mode</span><span className="v">{mode}</span></div>
-              <div><span className="k">Theory</span><span className="v">{genre.modeName}</span></div>
-              <div><span className="k">Running</span><span className="v">{isRunning ? 'Yes' : 'No'}</span></div>
-              <div><span className="k">Mood</span><span className="v">{mood}</span></div>
-              <div><span className="k">Latest</span><span className="v">{latest ? `$${latest.price.toFixed(2)}` : '--'}</span></div>
-            </div>
-          </div>
-        </section>
+        </>
       )}
 
       <section className="disclaimer-card panel-card">

@@ -554,3 +554,229 @@ button:hover {
     box-shadow: 0 0 18px rgba(62, 191, 134, 0.5);
   }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   HISTORY MODE — VIEW TOGGLE + STYLE TABS + PROGRESS
+   ═══════════════════════════════════════════════════════════ */
+
+.view-mode-toggle {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 6px;
+  gap: 2px;
+  z-index: 2;
+}
+
+.view-mode-toggle-inner {
+  display: flex;
+  background: rgba(15, 25, 40, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 20px;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid rgba(120, 180, 220, 0.15);
+}
+
+.vmt-btn {
+  background: transparent;
+  border: none;
+  color: rgba(160, 200, 220, 0.5);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 6px 18px;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.vmt-btn.active {
+  background: rgba(80, 160, 200, 0.22);
+  color: #b0e0f0;
+}
+
+.vmt-btn:hover:not(.active) {
+  color: rgba(180, 220, 240, 0.8);
+}
+
+/* Style tabs (Sakamoto / Zimmer) */
+.style-tabs {
+  display: flex;
+  background: rgba(10, 20, 35, 0.5);
+  border-radius: 14px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.style-tab {
+  background: transparent;
+  border: none;
+  color: rgba(160, 200, 220, 0.5);
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.style-tab.active {
+  color: #e0f0ff;
+}
+
+/* Sakamoto active = cool blue */
+.history-sakamoto .style-tab.active:first-child {
+  background: rgba(70, 160, 220, 0.25);
+  color: #a0d8f0;
+}
+
+/* Zimmer active = warm amber */
+.history-zimmer .style-tab.active:last-child {
+  background: rgba(220, 140, 50, 0.25);
+  color: #f0c878;
+}
+
+/* History info badge colors */
+.history-sakamoto .history-badge {
+  border-color: rgba(80, 180, 230, 0.2);
+}
+
+.history-zimmer .history-badge {
+  border-color: rgba(230, 150, 60, 0.2);
+}
+
+/* Progress bar */
+.history-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.05);
+  z-index: 5;
+}
+
+.history-progress-fill {
+  height: 100%;
+  transition: width 0.3s ease;
+  border-radius: 0 2px 2px 0;
+}
+
+.history-sakamoto .history-progress-fill {
+  background: linear-gradient(90deg, rgba(70, 160, 220, 0.4), rgba(120, 210, 255, 0.7));
+}
+
+.history-zimmer .history-progress-fill {
+  background: linear-gradient(90deg, rgba(220, 140, 50, 0.4), rgba(255, 180, 80, 0.7));
+}
+
+/* History controls bar */
+.history-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  margin: 0 8px;
+  background: rgba(12, 22, 38, 0.6);
+  backdrop-filter: blur(8px);
+  border-radius: 12px;
+  border: 1px solid rgba(120, 180, 220, 0.08);
+}
+
+.hc-label {
+  font-size: 0.68rem;
+  color: rgba(160, 200, 220, 0.5);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.hc-speed {
+  background: rgba(40, 60, 90, 0.3);
+  border: 1px solid rgba(120, 180, 220, 0.1);
+  color: rgba(160, 200, 220, 0.6);
+  font-size: 0.68rem;
+  padding: 4px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.hc-speed.active {
+  background: rgba(80, 160, 200, 0.2);
+  color: #b0e0f0;
+  border-color: rgba(120, 200, 240, 0.25);
+}
+
+.history-zimmer .hc-speed.active {
+  background: rgba(200, 130, 40, 0.2);
+  color: #f0c878;
+  border-color: rgba(220, 160, 60, 0.25);
+}
+
+.hc-reload {
+  background: rgba(40, 60, 90, 0.3);
+  border: 1px solid rgba(120, 180, 220, 0.1);
+  color: rgba(160, 200, 220, 0.6);
+  font-size: 0.82rem;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hc-reload:hover {
+  color: #b0e0f0;
+}
+
+.history-controls .slider-row {
+  margin: 0;
+  gap: 4px;
+}
+
+.history-controls .slider-row label {
+  font-size: 0.68rem;
+  color: rgba(160, 200, 220, 0.5);
+}
+
+.history-controls .slider-row input[type="range"] {
+  height: 3px;
+}
+
+/* Zimmer mode scene overrides */
+.history-zimmer .scene-orb-primary {
+  background: radial-gradient(circle, rgba(220, 120, 30, 0.25) 0%, transparent 70%);
+}
+
+.history-zimmer .scene-orb-secondary {
+  background: radial-gradient(circle, rgba(200, 60, 30, 0.15) 0%, transparent 70%);
+}
+
+/* History mode play button color overrides */
+.history-sakamoto .btn-play {
+  background: rgba(60, 150, 210, 0.2);
+  border-color: rgba(80, 180, 230, 0.3);
+  color: #a0d8f0;
+}
+
+.history-zimmer .btn-play {
+  background: rgba(210, 130, 40, 0.2);
+  border-color: rgba(230, 160, 60, 0.3);
+  color: #f0c878;
+  animation: btnGlowZimmer 2.2s ease-in-out infinite;
+}
+
+@keyframes btnGlowZimmer {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(220, 140, 50, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 18px rgba(220, 140, 50, 0.5);
+  }
+}

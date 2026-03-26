@@ -415,6 +415,143 @@ async def get_kline(symbol: str) -> dict:
         return {"bars": [], "error": str(exc)}
 
 
+@app.get("/api/history/{symbol}")
+async def get_history(symbol: str) -> dict:
+    """Return daily K-line bars for the current year (YTD)."""
+    source = choose_stream()
+    ticker = symbol.strip().upper()
+
+    if source != "tiger":
+        # ── Mock: structured market scenario with realistic patterns ──
+        # Generates ~60 days with distinct phases: consolidation → breakout
+        # → uptrend → distribution → crash → recovery
+        bars = []
+        # Base prices per symbol for realism
+        _base_prices = {
+            "CL": 68.5, "GC": 2640.0, "SI": 30.2, "NG": 3.8, "HG": 4.1,
+            "ES": 5820.0, "NQ": 20500.0, "YM": 42800.0,
+            "AAPL": 228.0, "TSLA": 340.0, "NVDA": 130.0, "MSFT": 420.0,
+            "AMZN": 200.0, "GOOGL": 180.0, "META": 580.0, "AMD": 120.0,
+            "PLTR": 78.0, "COIN": 260.0,
+        }
+        base_price = _base_prices.get(ticker, random.uniform(80, 350))
+        price = base_price
+        now_ts = int(time.time() * 1000)
+        day_ms = 86_400_000
+        n_days = 60
+        start_ts = now_ts - n_days * day_ms
+
+        # Define market phases: (phase_name, days, daily_drift, volatility)
+        phases = [
+            ("consolidation", 8,  0.001,  0.008),   # tight range
+            ("breakout",      3,  0.018,  0.025),   # gap up, high volume
+            ("uptrend",       12, 0.008,  0.012),   # steady climb
+            ("distribution",  6,  0.001,  0.015),   # choppy top
+            ("crash",         4, -0.035,  0.04),    # sharp sell-off
+            ("dead_cat",      2,  0.02,   0.03),    # brief bounce
+            ("downtrend",     8, -0.01,   0.018),   # grinding lower
+            ("capitulation",  2, -0.04,   0.05),    # final flush
+            ("recovery",      10, 0.012,  0.015),   # V-shape rebound
+            ("consolidation2",5,  0.002,  0.008),   # new range
+        ]
+        day_idx = 0
+        for phase_name, phase_days, drift, vol in phases:
+            actual_days = min(phase_days, n_days - day_idx)
+            if actual_days <= 0:
+                break
+            for d in range(actual_days):
+                t = start_ts + day_idx * day_ms
+                # Skip weekends roughly
+                daily_return = drift + random.gauss(0, vol)
+                # Phase-specific effects
+                if phase_name == "breakout" and d == 0:
+                    daily_return = abs(drift) * 2.5  # gap up
+                elif phase_name == "crash" and d == 0:
+                    daily_return = -abs(drift) * 2.0  # gap down
+                elif phase_name == "capitulation" and d == 0:
+                    daily_return = -abs(drift) * 1.8
+                price = max(price * 0.5, price * (1 + daily_return))
+                # Realistic OHLCV
+                intra_range = abs(daily_return) + vol * random.uniform(0.5, 1.5)
+                if daily_return >= 0:
+                    o = price * (1 - random.uniform(0, intra_range * 0.4))
+                    c = price
+                else:
+                    o = price * (1 + random.uniform(0, intra_range * 0.4))
+                    c = price
+                h = max(o, c) * (1 + random.uniform(0.001, intra_range * 0.5))
+                lo = min(o, c) * (1 - random.uniform(0.001, intra_range * 0.5))
+                # Volume correlates with volatility & phase
+                base_vol = 15000
+                if phase_name in ("breakout", "crash", "capitulation"):
+                    base_vol = 55000
+                elif phase_name in ("uptrend", "recovery"):
+                    base_vol = 25000
+                elif phase_name == "consolidation":
+                    base_vol = 8000
+                vol_noise = random.uniform(0.5, 1.8)
+                volume = int(base_vol * vol_noise + abs(daily_return) * 500000)
+                bars.append({
+                    "time": t,
+                    "open": round(o, 4),
+                    "high": round(h, 4),
+                    "low": round(lo, 4),
+                    "close": round(c, 4),
+                    "volume": volume,
+                })
+                day_idx += 1
+                if day_idx >= n_days:
+                    break
+        return {"bars": bars, "symbol": ticker}
+
+    # ── Tiger: fetch daily bars YTD ──
+    try:
+        import datetime
+        client = get_tiger_quote_client()
+        jan1 = datetime.datetime(datetime.datetime.now().year, 1, 1)
+        begin_ms = int(jan1.timestamp() * 1000)
+        bars_df = None
+
+        if _is_futures(ticker):
+            contract = ticker
+            if len(ticker) <= 3 or not ticker[2:].isdigit():
+                resolved = _resolve_futures_contract(ticker)
+                if resolved:
+                    contract = resolved
+            bars_df = await asyncio.to_thread(
+                client.get_future_bars,
+                [contract],
+                period=BarPeriod.DAY,
+                begin_time=begin_ms,
+                limit=250,
+            )
+        else:
+            bars_df = await asyncio.to_thread(
+                client.get_bars,
+                [ticker],
+                period=BarPeriod.DAY,
+                begin_time=begin_ms,
+                limit=250,
+            )
+
+        if bars_df is None or bars_df.empty:
+            return {"bars": [], "symbol": ticker}
+
+        result = []
+        for _, row in bars_df.iterrows():
+            t = int(row.get("time", 0))
+            o = float(row.get("open", 0))
+            h = float(row.get("high", 0))
+            lo = float(row.get("low", 0))
+            c = float(row.get("close", 0))
+            v = int(row.get("volume", 0))
+            if o > 0 and h > 0:
+                result.append({"time": t, "open": o, "high": h, "low": lo, "close": c, "volume": v})
+        return {"bars": result, "symbol": ticker}
+    except Exception as exc:
+        return {"bars": [], "symbol": ticker, "error": str(exc)}
+
+
 @app.websocket("/ws/quotes")
 async def ws_quotes(websocket: WebSocket, symbol: str = Query("CL", min_length=1, max_length=20)) -> None:
     await websocket.accept()
